@@ -23,6 +23,7 @@ import {
   SearchFilesArgsSchema,
   GetFileInfoArgsSchema,
   EditBlockArgsSchema,
+  UpdateSshConfigArgsSchema, // Added missing import
 } from './tools/schemas.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
@@ -38,6 +39,7 @@ import {
   listAllowedDirectories,
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
+import { sshClient } from './ssh-client.js'; // Added missing import
 
 import { VERSION } from './version.js';
 
@@ -203,6 +205,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "Format: filepath, then <<<<<<< SEARCH, content to find, =======, new content, >>>>>>> REPLACE.",
         inputSchema: zodToJsonSchema(EditBlockArgsSchema),
       },
+      {
+        name: "update_ssh_config",
+        description:
+          "Update the SSH configuration to connect to a different remote server or change authentication details.",
+        inputSchema: zodToJsonSchema(UpdateSshConfigArgsSchema),
+      },
+      // Add the get_ssh_config tool to the list
+      {
+        name: "get_ssh_config",
+        description:
+          "Get the current SSH configuration details.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
     ],
   };
 });
@@ -330,6 +349,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           content: [{ 
             type: "text", 
             text: `Allowed directories:\n${directories.join('\n')}` 
+          }],
+        };
+      }
+      case "update_ssh_config": {
+        const parsed = UpdateSshConfigArgsSchema.parse(args);
+        await sshClient.updateConfig(parsed);
+        return {
+          content: [{ type: "text", text: "SSH configuration updated successfully" }],
+        };
+      }
+      case "get_ssh_config": {
+        const config = sshClient.getConfig();
+        return {
+          content: [{ 
+            type: "text", 
+            text: JSON.stringify(config, null, 2) 
           }],
         };
       }

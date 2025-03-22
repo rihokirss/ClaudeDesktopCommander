@@ -8,7 +8,12 @@ class CommandManager {
     try {
       const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
       const config = JSON.parse(configData);
-      this.blockedCommands = new Set(config.blockedCommands);
+      // Load just the blockedCommands from the config
+      if (config.blockedCommands) {
+        this.blockedCommands = new Set(config.blockedCommands);
+      } else {
+        this.blockedCommands = new Set();
+      }
     } catch (error) {
       this.blockedCommands = new Set();
     }
@@ -16,12 +21,24 @@ class CommandManager {
 
   async saveBlockedCommands(): Promise<void> {
     try {
-      const config = {
+      // Read existing config to preserve other settings
+      let config = {};
+      try {
+        const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
+        config = JSON.parse(configData);
+      } catch (error) {
+        // If file doesn't exist or can't be parsed, use empty config
+      }
+
+      // Update just the blockedCommands
+      config = {
+        ...config,
         blockedCommands: Array.from(this.blockedCommands)
       };
+
       await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
     } catch (error) {
-      // Handle error if needed
+      console.error('Error saving blockedCommands:', error);
     }
   }
 

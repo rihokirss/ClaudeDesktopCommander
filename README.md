@@ -1,10 +1,10 @@
-# Claude Desktop Commander MCP
+# Claude Desktop Commander MCP with SSH Support
 
 [![npm downloads](https://img.shields.io/npm/dw/@wonderwhy-er/desktop-commander)](https://www.npmjs.com/package/@wonderwhy-er/desktop-commander)
 [![smithery badge](https://smithery.ai/badge/@wonderwhy-er/desktop-commander)](https://smithery.ai/server/@wonderwhy-er/desktop-commander)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg)](https://www.buymeacoffee.com/wonderwhyer)
 
-Short version. Two key things. Terminal commands and diff based file editing.
+Short version. Two key things. Terminal commands and diff based file editing, now with SSH support for remote execution.
 
 <a href="https://glama.ai/mcp/servers/zempur9oh4">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/zempur9oh4/badge" alt="Claude Desktop Commander MCP server" />
@@ -13,15 +13,17 @@ Short version. Two key things. Terminal commands and diff based file editing.
 ## Table of Contents
 - [Features](#features)
 - [Installation](#installation)
+- [SSH Configuration](#ssh-configuration)
 - [Usage](#usage)
 - [Handling Long-Running Commands](#handling-long-running-commands)
+- [SSH Remote Execution](#ssh-remote-execution)
 - [Work in Progress and TODOs](#work-in-progress-and-todos)
 - [Media links](#media)
 - [Testimonials](#testimonials)
 - [Contributing](#contributing)
 - [License](#license)
 
-This is server that allows Claude desktop app to execute long-running terminal commands on your computer and manage processes through Model Context Protocol (MCP) + Built on top of [MCP Filesystem Server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) to provide additional search and replace file editing capabilities .
+This server allows the Claude desktop app to execute long-running terminal commands on a remote Linux server through SSH, and manage processes through Model Context Protocol (MCP). Built on top of [MCP Filesystem Server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) to provide additional search and replace file editing capabilities.
 
 ## Features
 
@@ -29,6 +31,7 @@ This is server that allows Claude desktop app to execute long-running terminal c
 - Command timeout and background execution support
 - Process management (list and kill processes)
 - Session management for long-running commands
+- **Remote SSH execution** - Run commands on remote Linux machines
 - Full filesystem operations:
   - Read/write files
   - Create/list directories
@@ -44,52 +47,50 @@ This is server that allows Claude desktop app to execute long-running terminal c
 ## Installation
 First, ensure you've downloaded and installed the [Claude Desktop app](https://claude.ai/download) and you have [npm installed](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm).
 
-### Option 1: Installing via Smithery
-
-To install Desktop Commander for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@wonderwhy-er/desktop-commander):
+### Installing the SSH-enabled fork
 
 ```bash
-npx -y @smithery/cli install @wonderwhy-er/desktop-commander --client claude
+# Clone the repository
+git clone https://github.com/rihokirss/ClaudeDesktopCommander.git
+cd ClaudeDesktopCommander
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+
+# Set up Claude Desktop integration
+node dist/setup-claude-server.js
 ```
 
-### Option 2: Install trough npx
-Just run this in terminal
-```
-npx @wonderwhy-er/desktop-commander setup
-```
-Restart Claude if running
+Restart Claude Desktop if it's already running.
 
-### Option 3: Add to claude_desktop_config by hand
-Add this entry to your claude_desktop_config.json (on Mac, found at ~/Library/Application\ Support/Claude/claude_desktop_config.json):
+## SSH Configuration
+
+The setup script will create a `config.json` file with default SSH settings. You should edit this file to match your own SSH server details:
+
 ```json
 {
-  "mcpServers": {
-    "desktop-commander": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@wonderwhy-er/desktop-commander"
-      ]
-    }
+  "blockedCommands": [],
+  "ssh": {
+    "host": "your-server-ip",  
+    "username": "your-username",       
+    "privateKeyPath": "/path/to/your/private/key",
+    "port": 22
   }
 }
 ```
-Restart Claude if running
 
-### Option 4: Checkout locally
-1. Clone and build:
-```bash
-git clone https://github.com/wonderwhy-er/ClaudeComputerCommander.git
-cd ClaudeComputerCommander
-npm run setup
-```
-Restart Claude if running
+Customize these settings:
+- `host`: IP address or hostname of your remote server
+- `username`: Your SSH username
+- `privateKeyPath`: Full path to your private key file
+  - Windows example: `"C:\\Users\\YourUsername\\.ssh\\id_rsa"` (use double backslashes)
+  - Mac/Linux example: `"/home/username/.ssh/id_rsa"` or `"~/.ssh/id_rsa"`
+- `port`: SSH port (usually 22)
 
-The setup command will:
-- Install dependencies
-- Build the server
-- Configure Claude's desktop app
-- Add MCP servers to Claude's config if needed
+**Note:** After changing SSH settings, restart Claude Desktop if it's already running.
 
 ## Usage
 
@@ -110,6 +111,10 @@ The server provides these tool categories:
 - `move_file`: Move/rename files
 - `search_files`: Pattern-based file search
 - `get_file_info`: File metadata
+
+### SSH Tools
+- `update_ssh_config`: Update SSH connection settings
+- `get_ssh_config`: View current SSH configuration
 
 ### Edit Tools
 - `edit_block`: Apply surgical text replacements (best for changes <20% of file size)
@@ -144,6 +149,30 @@ For commands that may take a while:
 3. Use `read_output` with PID to get new output
 4. Use `force_terminate` to stop if needed
 
+## SSH Remote Execution
+
+All commands and file operations are executed on the remote server configured in your SSH settings:
+
+### Using SSH Tools
+
+- `update_ssh_config`: Update SSH connection settings during a session
+```
+// Example
+{
+  "host": "new-server.example.com",
+  "username": "newuser" 
+}
+```
+
+- `get_ssh_config`: View current SSH configuration
+
+### Troubleshooting SSH
+
+- Verify your SSH key has the correct permissions (600) on Unix-like systems
+- Make sure all paths in the config use the correct format for your OS
+- Confirm your SSH username and private key are correct
+- Ensure your SSH user has appropriate permissions on the remote server
+
 ## Model Context Protocol Integration
 
 This project extends the MCP Filesystem Server to enable:
@@ -152,6 +181,7 @@ This project extends the MCP Filesystem Server to enable:
 - Process management
 - File operations
 - Code editing with search/replace blocks
+- Remote SSH execution
 
 Created as part of exploring Claude MCPs: https://youtube.com/live/TlbjFDbl5Us
 
@@ -164,7 +194,7 @@ The following features are currently being developed or planned:
 - **Windows environment fixes** ([in progress](https://github.com/wonderwhy-er/ClaudeDesktopCommander/pull/13)) - Resolving issues specific to Windows platforms
 - **Linux improvements** ([in progress](https://github.com/wonderwhy-er/ClaudeDesktopCommander/pull/12)) - Enhancing compatibility with various Linux distributions
 - **Support for WSL** - Windows Subsystem for Linux integration
-- **Support for SSH** - Remote server command execution
+- ~~**Support for SSH**~~ - ✅ Implemented! Remote server command execution
 - **Installation troubleshooting guide** - Comprehensive help for setup issues
 
 ## Media
@@ -201,14 +231,14 @@ If you find this project useful, please consider giving it a ⭐ star on GitHub!
 
 We welcome contributions from the community! Whether you've found a bug, have a feature request, or want to contribute code, here's how you can help:
 
-- **Found a bug?** Open an issue at [github.com/wonderwhy-er/ClaudeComputerCommander/issues](https://github.com/wonderwhy-er/ClaudeComputerCommander/issues)
+- **Found a bug?** Open an issue at [github.com/rihokirss/ClaudeDesktopCommander/issues](https://github.com/rihokirss/ClaudeDesktopCommander/issues)
 - **Have a feature idea?** Submit a feature request in the issues section
 - **Want to contribute code?** Fork the repository, create a branch, and submit a pull request
 - **Questions or discussions?** Start a discussion in the GitHub Discussions tab
 
 All contributions, big or small, are greatly appreciated!
 
-If you find this tool valuable for your workflow, please consider [supporting the project](https://www.buymeacoffee.com/wonderwhyer).
+If you find this tool valuable for your workflow, please consider [supporting the original project](https://www.buymeacoffee.com/wonderwhyer).
 
 ## License
 

@@ -1,52 +1,65 @@
 import { homedir, platform } from 'os';
-import { join } from 'path';
-import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { DEFAULT_SSH_CONFIG } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '..');
 
-// Determine OS and set appropriate config path and command
+// Import the CONFIG_FILE path from config.ts
+import { CONFIG_FILE, LOG_FILE } from '../config.js';
+
+// Determine OS and set appropriate claude config path
 const isWindows = platform() === 'win32';
 const claudeConfigPath = isWindows
     ? join(process.env.APPDATA, 'Claude', 'claude_desktop_config.json')
     : join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-
-// Setup logging
-const LOG_FILE = join(__dirname, 'setup.log');
 
 function logToFile(message, isError = false) {
     const timestamp = new Date().toISOString();
     const logMessage = `${timestamp} - ${isError ? 'ERROR: ' : ''}${message}\n`;
     try {
         appendFileSync(LOG_FILE, logMessage);
-        // For setup script, we'll still output to console but in JSON format
-        const jsonOutput = {
-            type: isError ? 'error' : 'info',
-            timestamp,
-            message
-        };
-        process.stdout.write(JSON.stringify(jsonOutput) + '\n');
+        console.log(message);
     } catch (err) {
-        // Last resort error handling
-        process.stderr.write(JSON.stringify({
-            type: 'error',
-            timestamp: new Date().toISOString(),
-            message: `Failed to write to log file: ${err.message}`
-        }) + '\n');
+        console.error(`Failed to write to log file: ${err.message}`);
     }
 }
 
-// Check if config file exists and create default if not
+// Create project config.json file with SSH settings if it doesn't exist
+function setupProjectConfig() {
+    if (!existsSync(CONFIG_FILE)) {
+        logToFile(`Creating config.json at: ${CONFIG_FILE}`);
+        
+        // Use the default SSH config from config.ts
+        const defaultConfig = {
+            "blockedCommands": [],
+            "ssh": DEFAULT_SSH_CONFIG
+        };
+        
+        // Create the directory if it doesn't exist
+        const configDir = dirname(CONFIG_FILE);
+        if (!existsSync(configDir)) {
+            mkdirSync(configDir, { recursive: true });
+        }
+        
+        writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2));
+        logToFile('Config file created with SSH settings from config.ts');
+        logToFile('IMPORTANT: Please verify the SSH configuration in config.json');
+    }
+}
+
+// Check if Claude config file exists and create default if not
 if (!existsSync(claudeConfigPath)) {
     logToFile(`Claude config file not found at: ${claudeConfigPath}`);
-    logToFile('Creating default config file...');
+    logToFile('Creating default Claude config file...');
     
     // Create the directory if it doesn't exist
     const configDir = dirname(claudeConfigPath);
     if (!existsSync(configDir)) {
-        import('fs').then(fs => fs.mkdirSync(configDir, { recursive: true }));
+        mkdirSync(configDir, { recursive: true });
     }
     
     // Create default config
@@ -63,53 +76,46 @@ if (!existsSync(claudeConfigPath)) {
     };
     
     writeFileSync(claudeConfigPath, JSON.stringify(defaultConfig, null, 2));
-    logToFile('Default config file created. Please update it with your Claude API credentials.');
+    logToFile('Default Claude config file created.');
 }
 
 try {
-    // Read existing config
+    // Set up project config with SSH settings
+    setupProjectConfig();
+    
+    // Read existing Claude config
     const configData = readFileSync(claudeConfigPath, 'utf8');
     const config = JSON.parse(configData);
 
-    // Prepare the new server config based on OS
-    // Determine if running through npx or locally
-    const isNpx =  import.meta.url.endsWith('dist/setup-claude-server.js');
-
-    const serverConfig = isNpx ? {
-        "command": "npx",
-        "args": [
-            "@wonderwhy-er/desktop-commander"
-        ]
-    } : {
+    // Prepare the server config
+    const serverConfig = {
         "command": "node",
         "args": [
-            join(__dirname, 'dist', 'index.js')
-        ]
+            join(projectRoot, 'dist', 'index.js')
+        ],
+        "cwd": projectRoot
     };
 
-    // Add or update the terminal server config
+    // Add or update the MCP server config
     if (!config.mcpServers) {
         config.mcpServers = {};
     }
     
-    config.mcpServers.desktopCommander = serverConfig;
-
-    // Add puppeteer server if not present
-    /*if (!config.mcpServers.puppeteer) {
-        config.mcpServers.puppeteer = {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
-        };
-    }*/
+    // Use a unique name for the SSH-enabled server
+    config.mcpServers.sshDesktopCommander = serverConfig;
 
     // Write the updated config back
     writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf8');
     
-    logToFile('Successfully added MCP servers to Claude configuration!');
-    logToFile(`Configuration location: ${claudeConfigPath}`);
-    logToFile('\nTo use the servers:\n1. Restart Claude if it\'s currently running\n2. The servers will be available in Claude\'s MCP server list');
+    logToFile('Successfully added MCP server to Claude configuration!');
+    logToFile(`Claude config: ${claudeConfigPath}`);
+    logToFile(`Project config: ${CONFIG_FILE}`);
+    logToFile('\nSetup completed successfully!');
+    logToFile('1. Verify the SSH settings in config.json');
+    logToFile('2. Restart Claude if it\'s currently running');
+    logToFile('3. The SSH-enabled Desktop Commander will be available in Claude');
     
 } catch (error) {
-    logToFile(`Error updating Claude configuration: ${error}`, true);
+    logToFile(`Error during setup: ${error}`, true);
     process.exit(1);
 }

@@ -28,6 +28,14 @@ export const UnblockCommandArgsSchema = z.object({
   command: z.string(),
 });
 
+// SSH config schema
+export const UpdateSshConfigArgsSchema = z.object({
+  host: z.string().optional(),
+  username: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  port: z.number().optional(),
+});
+
 // Filesystem tools schemas
 export const ReadFileArgsSchema = z.object({
   path: z.string(),

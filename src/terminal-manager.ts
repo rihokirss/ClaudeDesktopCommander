@@ -1,6 +1,8 @@
-import { spawn } from 'child_process';
+// import { spawn } from 'child_process';
 import { TerminalSession, CommandExecutionResult, ActiveSession } from './types.js';
 import { DEFAULT_COMMAND_TIMEOUT } from './config.js';
+import { sshClient } from './ssh-client.js';
+import { ClientChannel } from 'ssh2';
 
 interface CompletedSession {
   pid: number;
@@ -10,94 +12,122 @@ interface CompletedSession {
   endTime: Date;
 }
 
+// Update the TerminalSession interface in types.ts to include sshChannel
+// export interface TerminalSession {
+//   pid: number;
+//   process: ChildProcess | null;
+//   sshChannel?: ClientChannel;
+//   lastOutput: string;
+//   isBlocked: boolean;
+//   startTime: Date;
+// }
+
 export class TerminalManager {
   private sessions: Map<number, TerminalSession> = new Map();
   private completedSessions: Map<number, CompletedSession> = new Map();
+  private nextPid: number = 1000; // Starting PID for SSH commands
   
   async executeCommand(command: string, timeoutMs: number = DEFAULT_COMMAND_TIMEOUT): Promise<CommandExecutionResult> {
-    const process = spawn(command, [], { shell: true });
-    let output = '';
-    
-    // Ensure process.pid is defined before proceeding
-    if (!process.pid) {
-      throw new Error('Failed to get process ID');
+    // First try to establish an SSH connection
+    try {
+      await sshClient.connect();
+    } catch (error) {
+      console.error('Failed to connect to SSH server:', error);
+      throw new Error(`Failed to connect to remote server: ${error instanceof Error ? error.message : String(error)}`);
     }
     
+    // Generate a unique ID for this session
+    const pid = this.nextPid++;
+    let output = '';
+    
     const session: TerminalSession = {
-      pid: process.pid,
-      process,
+      pid,
+      process: null, // We don't use local processes anymore
       lastOutput: '',
       isBlocked: false,
       startTime: new Date()
     };
     
-    this.sessions.set(process.pid, session);
+    this.sessions.set(pid, session);
 
-    return new Promise((resolve) => {
-      process.stdout.on('data', (data) => {
-        const text = data.toString();
-        output += text;
-        session.lastOutput += text;
-      });
+    try {
+      // Execute command on remote server
+      const { channel, promise } = await sshClient.executeCommandStream(
+        command,
+        (data) => {
+          output += data;
+          session.lastOutput += data;
+        },
+        (data) => {
+          output += data;
+          session.lastOutput += data;
+        }
+      );
+      
+      // Store SSH channel for potential termination
+      session.sshChannel = channel;
 
-      process.stderr.on('data', (data) => {
-        const text = data.toString();
-        output += text;
-        session.lastOutput += text;
-      });
-
-      setTimeout(() => {
+      // Set up timeout handling
+      const timeoutHandle = setTimeout(() => {
         session.isBlocked = true;
-        resolve({
-          pid: process.pid!,
-          output,
-          isBlocked: true
-        });
       }, timeoutMs);
 
-      process.on('exit', (code) => {
-        if (process.pid) {
-          // Store completed session before removing active session
-          this.completedSessions.set(process.pid, {
-            pid: process.pid,
-            output: output + session.lastOutput, // Combine all output
-            exitCode: code,
-            startTime: session.startTime,
-            endTime: new Date()
-          });
-          
-          // Keep only last 100 completed sessions
-          if (this.completedSessions.size > 100) {
-            const oldestKey = Array.from(this.completedSessions.keys())[0];
-            this.completedSessions.delete(oldestKey);
-          }
-          
-          this.sessions.delete(process.pid);
-        }
-        resolve({
-          pid: process.pid!,
-          output,
-          isBlocked: false
+      // Handle command completion
+      promise.then((code) => {
+        clearTimeout(timeoutHandle);
+        
+        // Store completed session info
+        this.completedSessions.set(pid, {
+          pid,
+          output: output + session.lastOutput,
+          exitCode: code,
+          startTime: session.startTime,
+          endTime: new Date()
         });
+        
+        // Limit completed sessions history
+        if (this.completedSessions.size > 100) {
+          const oldestKey = Array.from(this.completedSessions.keys())[0];
+          this.completedSessions.delete(oldestKey);
+        }
+        
+        this.sessions.delete(pid);
+      }).catch((error) => {
+        console.error(`Command execution error (PID ${pid}):`, error);
       });
-    });
+
+      // Return initial result
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            pid,
+            output,
+            isBlocked: session.isBlocked
+          });
+        }, Math.min(timeoutMs, 1000)); // Return faster for better UX
+      });
+    } catch (error) {
+      this.sessions.delete(pid);
+      throw error;
+    }
   }
 
   getNewOutput(pid: number): string | null {
-    // First check active sessions
+    // Check active sessions
     const session = this.sessions.get(pid);
     if (session) {
       const output = session.lastOutput;
       session.lastOutput = '';
-      return output;
+      return output || 'No new output available';
     }
 
-    // Then check completed sessions
+    // Check completed sessions
     const completedSession = this.completedSessions.get(pid);
     if (completedSession) {
-      // Format completion message with exit code and runtime
       const runtime = (completedSession.endTime.getTime() - completedSession.startTime.getTime()) / 1000;
-      return `Process completed with exit code ${completedSession.exitCode}\nRuntime: ${runtime}s\nFinal output:\n${completedSession.output}`;
+      const result = `Process completed with exit code ${completedSession.exitCode}\nRuntime: ${runtime.toFixed(2)}s\nFinal output:\n${completedSession.output}`;
+      this.completedSessions.delete(pid); // Remove after reading
+      return result;
     }
 
     return null;
@@ -105,20 +135,24 @@ export class TerminalManager {
 
   forceTerminate(pid: number): boolean {
     const session = this.sessions.get(pid);
-    if (!session) {
+    if (!session || !session.sshChannel) {
       return false;
     }
 
     try {
-      session.process.kill('SIGINT');
+      // Send termination signals to the remote process
+      session.sshChannel.signal('INT'); // SIGINT first
+      
+      // Try SIGKILL after a delay if it's still active
       setTimeout(() => {
-        if (this.sessions.has(pid)) {
-          session.process.kill('SIGKILL');
+        if (this.sessions.has(pid) && session.sshChannel) {
+          session.sshChannel.signal('KILL');
         }
       }, 1000);
+      
       return true;
     } catch (error) {
-      console.error(`Failed to terminate process ${pid}:`, error);
+      console.error(`Failed to terminate remote process ${pid}:`, error);
       return false;
     }
   }

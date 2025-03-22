@@ -1,4 +1,5 @@
 import { ChildProcess } from 'child_process';
+import { ClientChannel } from 'ssh2';
 
 export interface ProcessInfo {
   pid: number;
@@ -9,7 +10,8 @@ export interface ProcessInfo {
 
 export interface TerminalSession {
   pid: number;
-  process: ChildProcess;
+  process: ChildProcess | null;
+  sshChannel?: ClientChannel; // Added for SSH support
   lastOutput: string;
   isBlocked: boolean;
   startTime: Date;
