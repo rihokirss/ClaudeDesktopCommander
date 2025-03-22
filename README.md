@@ -68,21 +68,19 @@ Restart Claude Desktop if it's already running.
 
 ## SSH Configuration
 
-The setup script will create a `config.json` file with default SSH settings. You should edit this file to match your own SSH server details:
+SSH configuration is handled in the `config.ts` file:
 
-```json
-{
-  "blockedCommands": [],
-  "ssh": {
-    "host": "your-server-ip",  
-    "username": "your-username",       
-    "privateKeyPath": "/path/to/your/private/key",
-    "port": 22
-  }
-}
+```typescript
+// In config.ts
+export const DEFAULT_SSH_CONFIG = {
+  host: 'your-server-ip',
+  username: 'your-username',
+  privateKeyPath: '/path/to/your/private/key',
+  port: 22
+};
 ```
 
-Customize these settings:
+Customize these settings before building the project:
 - `host`: IP address or hostname of your remote server
 - `username`: Your SSH username
 - `privateKeyPath`: Full path to your private key file
@@ -90,7 +88,9 @@ Customize these settings:
   - Mac/Linux example: `"/home/username/.ssh/id_rsa"` or `"~/.ssh/id_rsa"`
 - `port`: SSH port (usually 22)
 
-**Note:** After changing SSH settings, restart Claude Desktop if it's already running.
+After updating the SSH settings in `config.ts`, rebuild the project with `npm run build` and restart Claude Desktop.
+
+You can also update SSH settings at runtime using the `update_ssh_config` tool within Claude.
 
 ## Usage
 

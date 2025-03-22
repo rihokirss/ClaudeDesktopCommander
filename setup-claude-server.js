@@ -2,14 +2,13 @@ import { homedir, platform } from 'os';
 import { join, dirname } from 'path';
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { DEFAULT_SSH_CONFIG } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..');
 
-// Import the CONFIG_FILE path from config.ts
-import { CONFIG_FILE, LOG_FILE } from '../config.js';
+// Import the LOG_FILE path from config.ts
+import { LOG_FILE } from '../config.js';
 
 // Determine OS and set appropriate claude config path
 const isWindows = platform() === 'win32';
@@ -25,29 +24,6 @@ function logToFile(message, isError = false) {
         console.log(message);
     } catch (err) {
         console.error(`Failed to write to log file: ${err.message}`);
-    }
-}
-
-// Create project config.json file with SSH settings if it doesn't exist
-function setupProjectConfig() {
-    if (!existsSync(CONFIG_FILE)) {
-        logToFile(`Creating config.json at: ${CONFIG_FILE}`);
-        
-        // Use the default SSH config from config.ts
-        const defaultConfig = {
-            "blockedCommands": [],
-            "ssh": DEFAULT_SSH_CONFIG
-        };
-        
-        // Create the directory if it doesn't exist
-        const configDir = dirname(CONFIG_FILE);
-        if (!existsSync(configDir)) {
-            mkdirSync(configDir, { recursive: true });
-        }
-        
-        writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2));
-        logToFile('Config file created with SSH settings from config.ts');
-        logToFile('IMPORTANT: Please verify the SSH configuration in config.json');
     }
 }
 
@@ -80,9 +56,6 @@ if (!existsSync(claudeConfigPath)) {
 }
 
 try {
-    // Set up project config with SSH settings
-    setupProjectConfig();
-    
     // Read existing Claude config
     const configData = readFileSync(claudeConfigPath, 'utf8');
     const config = JSON.parse(configData);
@@ -109,9 +82,8 @@ try {
     
     logToFile('Successfully added MCP server to Claude configuration!');
     logToFile(`Claude config: ${claudeConfigPath}`);
-    logToFile(`Project config: ${CONFIG_FILE}`);
     logToFile('\nSetup completed successfully!');
-    logToFile('1. Verify the SSH settings in config.json');
+    logToFile('1. SSH settings are configured in config.ts file');
     logToFile('2. Restart Claude if it\'s currently running');
     logToFile('3. The SSH-enabled Desktop Commander will be available in Claude');
     
