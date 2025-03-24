@@ -1,14 +1,14 @@
 import { homedir, platform } from 'os';
 import { join, dirname } from 'path';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..');
 
-// Import the LOG_FILE path from config.ts
-import { LOG_FILE } from '../config.js';
+// Define paths directly instead of importing from config
+const LOG_FILE = join(projectRoot, 'server.log');
 
 // Determine OS and set appropriate claude config path
 const isWindows = platform() === 'win32';
@@ -16,21 +16,15 @@ const claudeConfigPath = isWindows
     ? join(process.env.APPDATA, 'Claude', 'claude_desktop_config.json')
     : join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
 
-function logToFile(message, isError = false) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `${timestamp} - ${isError ? 'ERROR: ' : ''}${message}\n`;
-    try {
-        appendFileSync(LOG_FILE, logMessage);
-        console.log(message);
-    } catch (err) {
-        console.error(`Failed to write to log file: ${err.message}`);
-    }
+function log(message, isError = false) {
+    const prefix = isError ? 'ERROR: ' : '';
+    console.log(`${prefix}${message}`);
 }
 
 // Check if Claude config file exists and create default if not
 if (!existsSync(claudeConfigPath)) {
-    logToFile(`Claude config file not found at: ${claudeConfigPath}`);
-    logToFile('Creating default Claude config file...');
+    log(`Claude config file not found at: ${claudeConfigPath}`);
+    log('Creating default Claude config file...');
     
     // Create the directory if it doesn't exist
     const configDir = dirname(claudeConfigPath);
@@ -52,7 +46,7 @@ if (!existsSync(claudeConfigPath)) {
     };
     
     writeFileSync(claudeConfigPath, JSON.stringify(defaultConfig, null, 2));
-    logToFile('Default Claude config file created.');
+    log('Default Claude config file created.');
 }
 
 try {
@@ -74,20 +68,20 @@ try {
         config.mcpServers = {};
     }
     
-    // Use a unique name for the SSH-enabled server
-    config.mcpServers.sshDesktopCommander = serverConfig;
+    // Use "remoteCommander" as the MCP server name
+    config.mcpServers.remoteCommander = serverConfig;
 
     // Write the updated config back
     writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf8');
     
-    logToFile('Successfully added MCP server to Claude configuration!');
-    logToFile(`Claude config: ${claudeConfigPath}`);
-    logToFile('\nSetup completed successfully!');
-    logToFile('1. SSH settings are configured in config.ts file');
-    logToFile('2. Restart Claude if it\'s currently running');
-    logToFile('3. The SSH-enabled Desktop Commander will be available in Claude');
+    log('Successfully added MCP server to Claude configuration!');
+    log(`Claude config: ${claudeConfigPath}`);
+    log('\nSetup completed successfully!');
+    log('1. SSH settings are configured in config.ts file');
+    log('2. Restart Claude if it\'s currently running');
+    log('3. The "remoteCommander" will be available in Claude\'s MCP server list');
     
 } catch (error) {
-    logToFile(`Error during setup: ${error}`, true);
+    log(`Error during setup: ${error}`, true);
     process.exit(1);
 }
