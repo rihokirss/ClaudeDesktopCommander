@@ -44,6 +44,7 @@ class SSHClient {
 
   private loadConfig(): void {
     try {
+      //console.warn('CONFIG_FILE path:', CONFIG_FILE);
       if (fs.existsSync(CONFIG_FILE)) {
         const configData = fs.readFileSync(CONFIG_FILE, 'utf-8');
         const config = JSON.parse(configData) as ConfigFile;
@@ -86,7 +87,7 @@ class SSHClient {
       if (!fs.existsSync(CONFIG_FILE)) {
         // Create the file with default config
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2), 'utf-8');
-        console.log('Created default config.json file');
+        //console.log('Created default config.json file');
       } else {
         // Read existing config and update only missing parts
         const configData = fs.readFileSync(CONFIG_FILE, 'utf-8');
