@@ -1,6 +1,6 @@
 import { homedir, platform } from 'os';
 import { join, dirname } from 'path';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -62,8 +62,8 @@ if (!existsSync(CONFIG_FILE)) {
 
 // Check if Claude config file exists and create default if not
 if (!existsSync(claudeConfigPath)) {
-    logToFile(`Claude config file not found at: ${claudeConfigPath}`);
-    logToFile('Creating default Claude config file...');
+    log(`Claude config file not found at: ${claudeConfigPath}`);
+    log('Creating default Claude config file...');
     
     // Create the directory if it doesn't exist
     const configDir = dirname(claudeConfigPath);
@@ -85,7 +85,7 @@ if (!existsSync(claudeConfigPath)) {
     };
     
     writeFileSync(claudeConfigPath, JSON.stringify(defaultConfig, null, 2));
-    logToFile('Default Claude config file created.');
+    log('Default Claude config file created.');
 }
 
 try {
@@ -107,8 +107,8 @@ try {
         config.mcpServers = {};
     }
     
-    // Use a unique name for the SSH-enabled server
-    config.mcpServers.sshDesktopCommander = serverConfig;
+    // Use "remoteCommander" as the MCP server name
+    config.mcpServers.remoteCommander = serverConfig;
 
     // Write the updated config back
     writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), 'utf8');
@@ -121,6 +121,6 @@ try {
     logToFile('3. The SSH-enabled Desktop Commander will be available in Claude');
     
 } catch (error) {
-    logToFile(`Error during setup: ${error}`, true);
+    log(`Error during setup: ${error}`, true);
     process.exit(1);
 }
