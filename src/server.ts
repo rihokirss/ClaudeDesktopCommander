@@ -23,7 +23,8 @@ import {
   SearchFilesArgsSchema,
   GetFileInfoArgsSchema,
   EditBlockArgsSchema,
-  UpdateSshConfigArgsSchema, // Added missing import
+  UpdateSshConfigArgsSchema,
+  UpdateAllowedDirectoriesArgsSchema,
 } from './tools/schemas.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
@@ -37,6 +38,7 @@ import {
   searchFiles,
   getFileInfo,
   listAllowedDirectories,
+  updateAllowedDirectories,
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { sshClient } from './ssh-client.js'; // Added missing import
@@ -211,7 +213,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Update the SSH configuration to connect to a different remote server or change authentication details.",
         inputSchema: zodToJsonSchema(UpdateSshConfigArgsSchema),
       },
-      // Add the get_ssh_config tool to the list
       {
         name: "get_ssh_config",
         description:
@@ -221,6 +222,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {},
           required: [],
         },
+      },
+      {
+        name: "update_allowed_directories",
+        description:
+          "Update the list of allowed directories that can be accessed by the server.",
+        inputSchema: zodToJsonSchema(UpdateAllowedDirectoriesArgsSchema),
       },
     ],
   };
@@ -365,6 +372,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           content: [{ 
             type: "text", 
             text: JSON.stringify(config, null, 2) 
+          }],
+        };
+      }
+      case "update_allowed_directories": {
+        const parsed = UpdateAllowedDirectoriesArgsSchema.parse(args);
+        await updateAllowedDirectories(parsed.directories);
+        return {
+          content: [{ 
+            type: "text", 
+            text: `Successfully updated allowed directories: ${parsed.directories.join(', ')}` 
           }],
         };
       }

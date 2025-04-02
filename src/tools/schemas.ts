@@ -76,3 +76,8 @@ export const GetFileInfoArgsSchema = z.object({
 export const EditBlockArgsSchema = z.object({
   blockContent: z.string(),
 });
+
+// Allowed directories schema
+export const UpdateAllowedDirectoriesArgsSchema = z.object({
+  directories: z.array(z.string()),
+});

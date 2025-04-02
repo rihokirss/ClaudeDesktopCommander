@@ -2,7 +2,8 @@ import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
-import { CONFIG_FILE, DEFAULT_SSH_CONFIG } from './config.js';
+import { CONFIG_FILE } from './config.js';
+import os from 'os';
 
 interface SSHConfig {
   host: string;
@@ -14,9 +15,18 @@ interface SSHConfig {
 // Define an interface for the config file structure
 interface ConfigFile {
   blockedCommands?: string[];
-  ssh?: Partial<SSHConfig>;
+  allowedDirectories?: string[];
+  ssh?: SSHConfig;
   [key: string]: any;
 }
+
+// Default SSH config for fallback
+const DEFAULT_SSH_CONFIG: SSHConfig = {
+  host: 'localhost',
+  username: os.userInfo().username,
+  privateKeyPath: path.join(os.homedir(), '.ssh', 'id_rsa'),
+  port: 22
+};
 
 class SSHClient {
   private client: Client | null = null;
@@ -25,8 +35,8 @@ class SSHClient {
   private sftp: SFTPWrapper | null = null;
 
   constructor() {
-    // Default config
-    this.config = DEFAULT_SSH_CONFIG;
+    // Initialize with default config
+    this.config = {...DEFAULT_SSH_CONFIG};
     
     // Try to load from config file
     this.loadConfig();
@@ -38,17 +48,70 @@ class SSHClient {
         const configData = fs.readFileSync(CONFIG_FILE, 'utf-8');
         const config = JSON.parse(configData) as ConfigFile;
         
-        // Update config if SSH settings exist
-        if (config.ssh) {
-          this.config = {
-            ...DEFAULT_SSH_CONFIG,
-            ...config.ssh
-          };
+        // Update config if SSH settings exist and are complete
+        if (config.ssh && 
+            config.ssh.host && 
+            config.ssh.username && 
+            config.ssh.privateKeyPath && 
+            config.ssh.port) {
+          this.config = config.ssh;
+        } else {
+          console.warn('Incomplete SSH configuration in config.json. Using defaults or creating new config.');
+          this.createDefaultConfig();
         }
+      } else {
+        console.warn('No config.json file found. Creating default configuration.');
+        this.createDefaultConfig();
       }
     } catch (error) {
       console.error('Error loading SSH config:', error);
-      // Continue with default config
+      this.createDefaultConfig();
+    }
+  }
+
+  // Create a default config file if it doesn't exist
+  private createDefaultConfig(): void {
+    try {
+      // Create default config
+      const defaultConfig: ConfigFile = {
+        blockedCommands: [],
+        allowedDirectories: [
+          "/tmp",
+          path.join("/home", os.userInfo().username)
+        ],
+        ssh: DEFAULT_SSH_CONFIG
+      };
+
+      // Check if file exists
+      if (!fs.existsSync(CONFIG_FILE)) {
+        // Create the file with default config
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2), 'utf-8');
+        console.log('Created default config.json file');
+      } else {
+        // Read existing config and update only missing parts
+        const configData = fs.readFileSync(CONFIG_FILE, 'utf-8');
+        let existingConfig = JSON.parse(configData) as ConfigFile;
+        
+        // Update or add SSH config
+        existingConfig = {
+          ...existingConfig,
+          ssh: existingConfig.ssh ? {...DEFAULT_SSH_CONFIG, ...existingConfig.ssh} : DEFAULT_SSH_CONFIG,
+          allowedDirectories: existingConfig.allowedDirectories || defaultConfig.allowedDirectories,
+          blockedCommands: existingConfig.blockedCommands || []
+        };
+        
+        // Write back to file
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(existingConfig, null, 2), 'utf-8');
+        console.log('Updated config.json with missing defaults');
+        
+        // Update current config
+        if (existingConfig.ssh) {
+          this.config = existingConfig.ssh;
+        }
+      }
+    } catch (error) {
+      console.error('Error creating default config:', error);
+      // Continue with hard-coded default
     }
   }
 

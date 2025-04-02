@@ -1,11 +1,44 @@
 import path from "path";
 import { sshClient } from '../ssh-client.js';
+import fs from 'fs/promises';
+import { CONFIG_FILE } from '../config.js';
 
-// Store allowed directories on the remote Linux machine
-const allowedDirectories: string[] = [
-    '/home/rix',  // Remote user's home directory
+// Default allowed directories if not specified in config
+const DEFAULT_ALLOWED_DIRECTORIES: string[] = [
     '/tmp'        // Temporary directory
 ];
+
+// Store allowed directories on the remote Linux machine
+let allowedDirectories: string[] = [...DEFAULT_ALLOWED_DIRECTORIES];
+
+// Load allowed directories from config file
+async function loadAllowedDirectories(): Promise<void> {
+    try {
+        const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
+        const config = JSON.parse(configData);
+        
+        if (config.allowedDirectories && Array.isArray(config.allowedDirectories)) {
+            // Merge with default directories to ensure /tmp is always available
+            allowedDirectories = [...DEFAULT_ALLOWED_DIRECTORIES];
+            
+            // Add directories from config, ensuring no duplicates
+            config.allowedDirectories.forEach((dir: string) => {
+                const normalizedDir = normalizePath(dir);
+                if (!allowedDirectories.some(existing => normalizePath(existing) === normalizedDir)) {
+                    allowedDirectories.push(dir);
+                }
+            });
+        }
+    } catch (error) {
+        // If config file doesn't exist or is invalid, use defaults
+        allowedDirectories = [...DEFAULT_ALLOWED_DIRECTORIES];
+    }
+}
+
+// Initialize by loading allowed directories
+loadAllowedDirectories().catch(err => {
+    console.error('Error loading allowed directories:', err);
+});
 
 // Normalize all paths consistently for Linux
 function normalizePath(p: string): string {
@@ -14,7 +47,9 @@ function normalizePath(p: string): string {
 
 function expandHome(filepath: string): string {
     if (filepath.startsWith('~/') || filepath === '~') {
-        return path.posix.join('/home/rix', filepath.slice(1));
+        // Use SSH config username instead of hardcoded value
+        const config = sshClient.getConfig();
+        return path.posix.join(`/home/${config.username}`, filepath.slice(1));
     }
     return filepath;
 }
@@ -23,10 +58,13 @@ function expandHome(filepath: string): string {
 export async function validatePath(requestedPath: string): Promise<string> {
     const expandedPath = expandHome(requestedPath);
     
+    // Get SSH config for username
+    const sshConfig = sshClient.getConfig();
+    
     // Always use posix paths for Linux remote server
     const absolute = path.posix.isAbsolute(expandedPath)
         ? path.posix.normalize(expandedPath)
-        : path.posix.join('/home/rix', expandedPath);
+        : path.posix.join(`/home/${sshConfig.username}`, expandedPath);
         
     const normalizedRequested = normalizePath(absolute);
 
@@ -73,6 +111,34 @@ export async function validatePath(requestedPath: string): Promise<string> {
         } catch (error) {
             throw new Error(`Parent directory does not exist or cannot be accessed: ${parentDir}`);
         }
+    }
+}
+
+// Add function to update allowed directories
+export async function updateAllowedDirectories(dirs: string[]): Promise<void> {
+    try {
+        // Read existing config to preserve other settings
+        let config = {};
+        try {
+            const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
+            config = JSON.parse(configData);
+        } catch (error) {
+            // If file doesn't exist or can't be parsed, use empty config
+        }
+
+        // Update allowedDirectories in config
+        config = {
+            ...config,
+            allowedDirectories: dirs
+        };
+
+        await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+        
+        // Reload the directories
+        await loadAllowedDirectories();
+    } catch (error) {
+        console.error('Error saving allowed directories:', error);
+        throw new Error(`Failed to update allowed directories: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -183,5 +249,5 @@ export async function getFileInfo(filePath: string): Promise<Record<string, any>
 }
 
 export function listAllowedDirectories(): string[] {
-    return allowedDirectories;
+    return [...allowedDirectories];
 }

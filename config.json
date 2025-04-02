@@ -13,5 +13,15 @@
     "useradd",
     "usermod",
     "groupadd"
-  ]
+  ],
+  "allowedDirectories": [
+    "/tmp",
+    "/home/username" 
+  ],
+  "ssh": {
+    "host": "your-server-ip",
+    "username": "your-username",
+    "privateKeyPath": "~/.ssh/id_rsa",
+    "port": 22
+  }
 }
