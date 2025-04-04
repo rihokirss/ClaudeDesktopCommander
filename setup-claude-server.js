@@ -13,7 +13,7 @@ import * as path from 'path';
 import * as process from 'process';
 
 // Määratleme ise need konstandid
-const CONFIG_FILE = path.join(process.cwd(), 'config.json');
+const CONFIG_FILE = path.join(process.cwd(), '../config.json');
 const LOG_FILE = path.join(process.cwd(), 'server.log');
 
 // Determine OS and set appropriate claude config path
